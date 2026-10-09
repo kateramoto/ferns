@@ -82,6 +82,10 @@
       const days = 280 - Math.round((due - new Date()) / 86400000);
       return Math.max(0, Math.min(42, Math.round(days / 7)));
     }
+    // Weeks are stored at save time, so recompute from the due date to keep them current
+    function withLiveWeeks(e) {
+      return e && e.type === "pregnancy" && e.dueDate ? { ...e, weeks: getWeeksFromDueDate(e.dueDate) } : e;
+    }
     function getDueDateFromWeeks(w) {
       const d = new Date(); d.setDate(d.getDate() + (40 - w) * 7);
       return d.toISOString().split("T")[0];
@@ -661,10 +665,19 @@
       // Load from Google Sheets on mount
       useEffect(() => {
         api({ action: "getEntries", key: userKey })
-          .then(res => { if (res.ok) setEntries(res.entries || []); })
+          .then(res => { if (res.ok) setEntries((res.entries || []).map(withLiveWeeks)); })
           .catch(() => {})
           .finally(() => setLoading(false));
       }, [userKey]);
+
+      // Refresh pregnancy weeks when the app comes back to the foreground
+      useEffect(() => {
+        const refresh = () => {
+          if (document.visibilityState === "visible") setEntries(prev => prev.map(withLiveWeeks));
+        };
+        document.addEventListener("visibilitychange", refresh);
+        return () => document.removeEventListener("visibilitychange", refresh);
+      }, []);
 
       // Persist to Google Sheets + localStorage backup
       async function persist(list) {
